@@ -1,6 +1,9 @@
 {
   "name": "eShop Workshop (.NET Aspire)",
-  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "options": ["--platform=linux/amd64"]
+  },
   "runArgs": ["--platform=linux/amd64"],
 
   "features": {
