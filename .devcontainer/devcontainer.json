@@ -1,7 +1,6 @@
 {
   "name": "eShop Workshop (.NET Aspire)",
   "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
-  "runArgs": ["--platform=linux/amd64"],
 
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
