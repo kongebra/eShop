@@ -14,16 +14,18 @@ error MSB6006: "…/grpc.tools/2.80.0/tools/linux_arm64/protoc" exited with code
 
 Forsøkt (fungerer ikke): Grpc.Tools 2.78.0 → 2.79.0 → 2.80.0. Alle tre har samme arm64-bug i dette basebildet.
 
-### Plan A (aktiv default) — pin containeren til `linux/amd64`
+### Plan A — pin containeren til `linux/amd64` (opt-in)
 
-`devcontainer.json` har:
+Default er native host-arch. Hvis build-feilen over dukker opp, slå på amd64-pin ved å:
 
-```json
-"runArgs": ["--platform=linux/amd64"]
-```
+1. Åpne `.devcontainer/Dockerfile` — aktivér `FROM --platform=linux/amd64 …`-linjen (kommenter ut den aktive `FROM`-linjen).
+2. Åpne `.devcontainer/devcontainer.json` — aktivér `build.options` og `runArgs` for `--platform=linux/amd64`.
+3. Kjør *Dev Containers: Rebuild Container*.
+
+**Alle tre stedene må aktiveres samtidig** — ellers mismatch mellom buildx og run.
 
 - **Apple Silicon:** container kjører via Rosetta. ~20–40 % treghet, men stabilt.
-- **Intel Mac / Windows x64 / Linux x64 / Codespaces:** native, full fart.
+- **Intel Mac / Windows x64 / Linux x64 / Codespaces:** native, full fart (pinnen er no-op der).
 
 **Forutsetning på Apple Silicon:** Docker Desktop → Settings → General → ✅ *"Use Rosetta for x86_64/amd64 emulation on Apple Silicon"*. Default på siden Docker Desktop 4.25.
 

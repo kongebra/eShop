@@ -1,10 +1,13 @@
 {
   "name": "eShop Workshop (.NET Aspire)",
   "build": {
-    "dockerfile": "Dockerfile",
-    "options": ["--platform=linux/amd64"]
+    "dockerfile": "Dockerfile"
+    // Uncomment together with the FROM --platform line in the Dockerfile
+    // and the runArgs below if you hit the Grpc.Tools arm64 protoc
+    // segfault (exit 139) on Apple Silicon. See TROUBLESHOOTING.md.
+    // "options": ["--platform=linux/amd64"]
   },
-  "runArgs": ["--platform=linux/amd64"],
+  // "runArgs": ["--platform=linux/amd64"],
 
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
