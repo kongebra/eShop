@@ -1,21 +1,29 @@
 {
   "version": "1.0",
-  "defaultProvider": "cdnjs",
+  "defaultProvider": "unpkg",
   "libraries": [
     {
       "library": "jquery@3.6.3",
-      "destination": "wwwroot/lib/jquery/"
+      "destination": "wwwroot/lib/jquery/",
+      "files": [
+        "dist/jquery.js",
+        "dist/jquery.min.js",
+        "dist/jquery.min.map",
+        "dist/jquery.slim.js",
+        "dist/jquery.slim.min.js",
+        "dist/jquery.slim.min.map"
+      ]
     },
     {
       "library": "bootstrap@5.2.3",
       "destination": "wwwroot/lib/bootstrap/",
       "files": [
-        "css/bootstrap.css",
-        "css/bootstrap.css.map",
-        "css/bootstrap.min.css",
-        "css/bootstrap.min.css.map",
-        "js/bootstrap.bundle.js",
-        "js/bootstrap.bundle.min.js"
+        "dist/css/bootstrap.css",
+        "dist/css/bootstrap.css.map",
+        "dist/css/bootstrap.min.css",
+        "dist/css/bootstrap.min.css.map",
+        "dist/js/bootstrap.bundle.js",
+        "dist/js/bootstrap.bundle.min.js"
       ]
     },
     {
@@ -23,11 +31,11 @@
       "destination": "wwwroot/lib/jquery-validation-unobtrusive/"
     },
     {
-      "library": "jquery-validate@1.19.5",
-      "destination": "wwwroot/lib/jquery-validate/",
+      "library": "jquery-validation@1.19.5",
+      "destination": "wwwroot/lib/jquery-validation/",
       "files": [
-        "jquery.validate.min.js",
-        "jquery.validate.js"
+        "dist/jquery.validate.min.js",
+        "dist/jquery.validate.js"
       ]
     }
   ]
