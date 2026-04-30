@@ -1,40 +1,27 @@
-# eShop — Agent Instructions
+# eShop - Agent Index
 
-## Project
-eShop is a reference microservices application built with .NET Aspire.
-It demonstrates cloud-native patterns: event-driven communication (RabbitMQ), gRPC, Minimal APIs, and EF Core with PostgreSQL.
+Use this file for repo-wide context. Read the nearest scoped `AGENTS.md` before changing code in that area:
 
-Services: Catalog.API · Basket.API (gRPC) · Ordering.API (CQRS/MediatR) · Identity.API · WebApp (Blazor)
+- `src\AGENTS.md` - shared service, AppHost, event bus, package rules
+- `src\eShop.AppHost\AGENTS.md` - Aspire orchestration, resource names, AI toggles
+- `src\Ordering.API\AGENTS.md` and `src\Ordering.Domain\AGENTS.md` - Ordering CQRS/DDD flow
+- `src\Catalog.API\AGENTS.md`, `src\Basket.API\AGENTS.md`, `src\WebApp\AGENTS.md` - service-specific rules
+- `tests\AGENTS.md` and `e2e\AGENTS.md` - test harness specifics
 
-## Commands
+## Verified command gotchas
 
-Always run the application from the solution root:
+- Run the app from the repo root: `dotnet run --project src\eShop.AppHost\eShop.AppHost.csproj` (requires Docker).
+- This repo uses Microsoft.Testing.Platform. Use `dotnet test --project <path-to-csproj>` or `--solution eShop.slnx`; bare directory paths such as `dotnet test tests\Ordering.UnitTests` fail.
+- Fast unit-test validation:
+  - `dotnet test --project tests\Ordering.UnitTests\Ordering.UnitTests.csproj`
+  - `dotnet test --project tests\Basket.UnitTests\Basket.UnitTests.csproj`
+  - Single test: `dotnet test --project tests\Ordering.UnitTests\Ordering.UnitTests.csproj --filter "FullyQualifiedName~CreateOrderCommandHandlerTest"`
+- Functional tests spin up Aspire resources/containers; check Docker/container startup before treating a slow full-solution test run as a code failure.
+- Playwright defaults to `http://localhost:5045`; logged-in tests require `USERNAME1` and `PASSWORD`.
 
-```bash
-aspire run
-```
+## Repo-wide facts
 
-Run all tests:
-
-```bash
-dotnet test
-```
-
-## Conventions
-
-- All code in English. Comments may be in Norwegian.
-- Follow .NET naming conventions and best practices.
-- Use async/await for all I/O operations.
-- Write clean, readable code with meaningful variable names.
-- Catalog and Ordering APIs use .NET Minimal API — no MVC controllers.
-- No hardcoded secrets, connection strings, or credentials in code. Use configuration or environment variables.
-
-## Testing
-
-Write tests for all new functionality. Use the existing test projects as reference.
-
-## Agent principles
-
-- Ask clarifying questions before writing code — do not guess requirements.
-- Prefer the simplest solution.
-- Touch only what the task requires. No unrequested refactoring.
+- `src\eShop.AppHost` wires Redis, RabbitMQ, PostgreSQL/pgvector, APIs, workers, and the Blazor frontend.
+- Central NuGet versions live in `Directory.Packages.props`; do not add versions in project files.
+- `TreatWarningsAsErrors` and `UseArtifactsOutput` are enabled globally.
+- Services communicate through Aspire service discovery (HTTP/gRPC) and RabbitMQ integration events; EF-backed services use an outbox (`IntegrationEventLogEF`) when data changes publish events.
