@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Asp.Versioning;
 using Asp.Versioning.Http;
@@ -23,6 +24,36 @@ public sealed class CatalogApiTests : IClassFixture<CatalogApiFixture>
         return _webApplicationFactory.CreateDefaultClient(handler);
     }
 
+    private async Task<PaginatedItems<CatalogItem>> GetCatalogItemsAsync(HttpClient httpClient, string requestUri)
+    {
+        var response = await httpClient.GetAsync(requestUri, TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var result = JsonSerializer.Deserialize<PaginatedItems<CatalogItem>>(body, _jsonSerializerOptions);
+
+        Assert.NotNull(result);
+        return result;
+    }
+
+    private static CatalogItem CreateCatalogItem(int id, string name, int availableStock) => new(name)
+    {
+        Id = id,
+        Description = $"{name} description",
+        Price = 42.50m,
+        PictureFileName = null,
+        CatalogTypeId = 8,
+        CatalogType = null,
+        CatalogBrandId = 13,
+        CatalogBrand = null,
+        AvailableStock = availableStock,
+        RestockThreshold = 10,
+        MaxStockThreshold = 200,
+        OnReorder = false
+    };
+
+    private sealed record CatalogPriceRangeResult(decimal MinPrice, decimal MaxPrice);
+
     [Theory]
     [InlineData(1.0)]
     [InlineData(2.0)]
@@ -42,6 +73,281 @@ public sealed class CatalogApiTests : IClassFixture<CatalogApiFixture>
         Assert.Equal(103, result.Count);
         Assert.Equal(0, result.PageIndex);
         Assert.Equal(5, result.PageSize);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemsWithMaxPriceReturnsOnlyItemsAtOrBelowMaxPrice(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+        const decimal maxPrice = 50m;
+
+        var allItems = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500");
+        var expectedItems = allItems.Data.Where(item => item.Price <= maxPrice).ToList();
+
+        Assert.NotEmpty(expectedItems);
+
+        var result = await GetCatalogItemsAsync(_httpClient, $"/api/catalog/items?pageIndex=0&pageSize=500&maxPrice={maxPrice}");
+
+        Assert.Equal(expectedItems.Count, result.Count);
+        Assert.All(result.Data, item => Assert.True(item.Price <= maxPrice, $"Expected {item.Name} price {item.Price} to be <= {maxPrice}."));
+    }
+
+    [Theory]
+    [InlineData(1.0, "/api/catalog/items/type/3/brand/3?pageIndex=0&pageSize=500", "/api/catalog/items/type/3/brand/3?pageIndex=0&pageSize=500&maxPrice=100")]
+    [InlineData(2.0, "/api/catalog/items?pageIndex=0&pageSize=500&type=3&brand=3", "/api/catalog/items?pageIndex=0&pageSize=500&type=3&brand=3&maxPrice=100")]
+    public async Task GetCatalogItemsWithMaxPriceComposesWithTypeAndBrandFilters(double version, string unfilteredRequestUri, string filteredRequestUri)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+        const decimal maxPrice = 100m;
+
+        var unfilteredItems = await GetCatalogItemsAsync(_httpClient, unfilteredRequestUri);
+        var expectedItems = unfilteredItems.Data.Where(item => item.Price <= maxPrice).ToList();
+
+        Assert.NotEmpty(expectedItems);
+        Assert.True(expectedItems.Count < unfilteredItems.Count, "Test data should include at least one item above maxPrice for this type/brand filter.");
+
+        var result = await GetCatalogItemsAsync(_httpClient, filteredRequestUri);
+
+        Assert.Equal(expectedItems.Count, result.Count);
+        Assert.All(result.Data, item =>
+        {
+            Assert.Equal(3, item.CatalogTypeId);
+            Assert.Equal(3, item.CatalogBrandId);
+            Assert.True(item.Price <= maxPrice, $"Expected {item.Name} price {item.Price} to be <= {maxPrice}.");
+        });
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemsWithNegativeMaxPriceReturnsBadRequest(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var response = await _httpClient.GetAsync("/api/catalog/items?pageIndex=0&pageSize=5&maxPrice=-1", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemsWithInStockTrueReturnsOnlyItemsWithAvailableStock(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var allItems = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500");
+        var expectedItems = allItems.Data.Where(item => item.AvailableStock > 0).ToList();
+
+        Assert.NotEmpty(expectedItems);
+
+        var result = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500&inStock=true");
+
+        Assert.Equal(expectedItems.Count, result.Count);
+        Assert.All(result.Data, item => Assert.True(item.AvailableStock > 0, $"Expected {item.Name} to have available stock."));
+    }
+
+    [Theory]
+    [InlineData(1.0, 11001)]
+    [InlineData(2.0, 11002)]
+    public async Task GetCatalogItemsWithInStockFalseReturnsOnlyItemsWithoutAvailableStock(double version, int itemId)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+        var outOfStockItem = CreateCatalogItem(itemId, $"Out of stock test item {version}", availableStock: 0);
+
+        var createResponse = await _httpClient.PostAsJsonAsync("/api/catalog/items", outOfStockItem, TestContext.Current.CancellationToken);
+        createResponse.EnsureSuccessStatusCode();
+
+        var result = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500&inStock=false");
+
+        Assert.Contains(result.Data, item => item.Id == itemId);
+        Assert.All(result.Data, item => Assert.True(item.AvailableStock <= 0, $"Expected {item.Name} to have no available stock."));
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemsWithInStockComposesWithMaxPrice(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+        const decimal maxPrice = 50m;
+
+        var allItems = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500");
+        var expectedItems = allItems.Data
+            .Where(item => item.AvailableStock > 0 && item.Price <= maxPrice)
+            .ToList();
+
+        Assert.NotEmpty(expectedItems);
+
+        var result = await GetCatalogItemsAsync(_httpClient, $"/api/catalog/items?pageIndex=0&pageSize=500&inStock=true&maxPrice={maxPrice}");
+
+        Assert.Equal(expectedItems.Count, result.Count);
+        Assert.All(result.Data, item =>
+        {
+            Assert.True(item.AvailableStock > 0, $"Expected {item.Name} to have available stock.");
+            Assert.True(item.Price <= maxPrice, $"Expected {item.Name} price {item.Price} to be <= {maxPrice}.");
+        });
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemsWithPriceIntervalReturnsOnlyItemsWithinRange(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+        const decimal minPrice = 50m;
+        const decimal maxPrice = 150m;
+
+        var allItems = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500");
+        var expectedItems = allItems.Data
+            .Where(item => item.Price >= minPrice && item.Price <= maxPrice)
+            .ToList();
+
+        Assert.NotEmpty(expectedItems);
+
+        var result = await GetCatalogItemsAsync(_httpClient, $"/api/catalog/items?pageIndex=0&pageSize=500&minPrice={minPrice}&maxPrice={maxPrice}");
+
+        Assert.Equal(expectedItems.Count, result.Count);
+        Assert.All(result.Data, item =>
+        {
+            Assert.True(item.Price >= minPrice, $"Expected {item.Name} price {item.Price} to be >= {minPrice}.");
+            Assert.True(item.Price <= maxPrice, $"Expected {item.Name} price {item.Price} to be <= {maxPrice}.");
+        });
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemsWithInvalidPriceIntervalReturnsBadRequest(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var response = await _httpClient.GetAsync("/api/catalog/items?pageIndex=0&pageSize=5&minPrice=150&maxPrice=50", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogItemPriceRangeReturnsCatalogMinimumAndMaximumPrices(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var allItems = await GetCatalogItemsAsync(_httpClient, "/api/catalog/items?pageIndex=0&pageSize=500");
+
+        var response = await _httpClient.GetAsync("/api/catalog/items/price-range", TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var result = JsonSerializer.Deserialize<CatalogPriceRangeResult>(body, _jsonSerializerOptions);
+
+        Assert.NotNull(result);
+        Assert.Equal(allItems.Data.Min(item => item.Price), result.MinPrice);
+        Assert.Equal(allItems.Data.Max(item => item.Price), result.MaxPrice);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogTypeWithIdReturnsCatalogType(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var typesResponse = await _httpClient.GetAsync("api/catalog/catalogtypes", TestContext.Current.CancellationToken);
+        typesResponse.EnsureSuccessStatusCode();
+        var typesBody = await typesResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var types = JsonSerializer.Deserialize<List<CatalogType>>(typesBody, _jsonSerializerOptions);
+
+        Assert.NotNull(types);
+        var expectedType = types.First();
+
+        var response = await _httpClient.GetAsync($"api/catalog/catalogtypes/{expectedType.Id}", TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var result = JsonSerializer.Deserialize<CatalogType>(body, _jsonSerializerOptions);
+
+        Assert.NotNull(result);
+        Assert.Equal(expectedType.Id, result.Id);
+        Assert.Equal(expectedType.Type, result.Type);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogTypeWithUnknownIdReturnsNotFound(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var response = await _httpClient.GetAsync("api/catalog/catalogtypes/999999", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetCatalogTypeWithNonPositiveIdReturnsBadRequest(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var response = await _httpClient.GetAsync("api/catalog/catalogtypes/0", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetRelatedCatalogItemsReturnsSameTypeItemsAndExcludesSourceItem(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var sourceResponse = await _httpClient.GetAsync("/api/catalog/items/1", TestContext.Current.CancellationToken);
+        sourceResponse.EnsureSuccessStatusCode();
+        var sourceBody = await sourceResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var sourceItem = JsonSerializer.Deserialize<CatalogItem>(sourceBody, _jsonSerializerOptions);
+
+        Assert.NotNull(sourceItem);
+
+        var response = await _httpClient.GetAsync("/api/catalog/items/1/related?limit=4", TestContext.Current.CancellationToken);
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var relatedItems = JsonSerializer.Deserialize<List<CatalogItem>>(body, _jsonSerializerOptions);
+
+        Assert.NotNull(relatedItems);
+        Assert.NotEmpty(relatedItems);
+        Assert.True(relatedItems.Count <= 4);
+        Assert.DoesNotContain(relatedItems, item => item.Id == sourceItem.Id);
+        Assert.All(relatedItems, item => Assert.Equal(sourceItem.CatalogTypeId, item.CatalogTypeId));
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetRelatedCatalogItemsWithUnknownSourceItemReturnsNotFound(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var response = await _httpClient.GetAsync("/api/catalog/items/999999/related", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task GetRelatedCatalogItemsWithInvalidLimitReturnsBadRequest(double version)
+    {
+        var _httpClient = CreateHttpClient(new ApiVersion(version));
+
+        var response = await _httpClient.GetAsync("/api/catalog/items/1/related?limit=0", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Theory]

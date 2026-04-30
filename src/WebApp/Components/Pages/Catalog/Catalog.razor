@@ -8,7 +8,7 @@
 <SectionContent SectionName="page-header-subtitle">Start the season with the latest in clothing and equipment.</SectionContent>
 
 <div class="catalog">
-    <CatalogSearch BrandId="@BrandId" ItemTypeId="@ItemTypeId" />
+    <CatalogSearch BrandId="@BrandId" ItemTypeId="@ItemTypeId" MinPrice="@MinPrice" MaxPrice="@MaxPrice" />
 
     @if (catalogResult is null)
     {
@@ -46,6 +46,12 @@
     [SupplyParameterFromQuery(Name = "type")]
     public int? ItemTypeId { get; set; }
 
+    [SupplyParameterFromQuery]
+    public decimal? MinPrice { get; set; }
+
+    [SupplyParameterFromQuery]
+    public decimal? MaxPrice { get; set; }
+
     CatalogResult? catalogResult;
 
     static IEnumerable<int> GetVisiblePageIndexes(CatalogResult result)
@@ -57,6 +63,8 @@
             Page.GetValueOrDefault(1) - 1,
             PageSize,
             BrandId,
-            ItemTypeId);
+            ItemTypeId,
+            MinPrice,
+            MaxPrice);
     }
 }

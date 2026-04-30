@@ -1,7 +1,7 @@
 ﻿@inject CatalogService CatalogService
 @inject NavigationManager Nav
 
-@if (catalogBrands is not null && catalogItemTypes is not null)
+@if (catalogBrands is not null && catalogItemTypes is not null && priceRange is not null)
 {
     <div class="catalog-search">
         <div class="catalog-search-header">
@@ -42,6 +42,31 @@
                     }
                 </div>
             </div>
+            <div class="catalog-search-group">
+                <h3>Price</h3>
+
+                <div class="catalog-search-group-tags">
+                    <a href="@PriceUri(null, null)"
+                    class="catalog-search-tag @(MinPrice == null && MaxPrice == null ? "active " : "")">
+                        All
+                    </a>
+                    <a href="@PriceUri(null, 50m)"
+                    class="catalog-search-tag @(MinPrice == null && MaxPrice == 50m ? "active " : "")">
+                        Up to $50
+                    </a>
+                    <a href="@PriceUri(50m, 150m)"
+                    class="catalog-search-tag @(MinPrice == 50m && MaxPrice == 150m ? "active " : "")">
+                        $50-$150
+                    </a>
+                    <a href="@PriceUri(150m, null)"
+                    class="catalog-search-tag @(MinPrice == 150m && MaxPrice == null ? "active " : "")">
+                        $150+
+                    </a>
+                </div>
+                <p class="catalog-search-price-range">
+                    Range: $@priceRange.MinPrice.ToString("0.00")-$@priceRange.MaxPrice.ToString("0.00")
+                </p>
+            </div>
         </div>
     </div>
 }
@@ -49,16 +74,21 @@
 @code {
     IEnumerable<CatalogBrand>? catalogBrands;
     IEnumerable<CatalogItemType>? catalogItemTypes;
+    CatalogPriceRange? priceRange;
     [Parameter] public int? BrandId { get; set; }
     [Parameter] public int? ItemTypeId { get; set; }
+    [Parameter] public decimal? MinPrice { get; set; }
+    [Parameter] public decimal? MaxPrice { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         var brandsTask = CatalogService.GetBrands();
         var itemTypesTask = CatalogService.GetTypes();
-        await Task.WhenAll(brandsTask, itemTypesTask);
+        var priceRangeTask = CatalogService.GetPriceRange();
+        await Task.WhenAll(brandsTask, itemTypesTask, priceRangeTask);
         catalogBrands = brandsTask.Result;
         catalogItemTypes = itemTypesTask.Result;
+        priceRange = priceRangeTask.Result;
     }
 
     private string BrandUri(int? brandId) => Nav.GetUriWithQueryParameters(new Dictionary<string, object?>()
@@ -71,5 +101,12 @@
     {
         { "page", null },
         { "type", typeId },
+    });
+
+    private string PriceUri(decimal? minPrice, decimal? maxPrice) => Nav.GetUriWithQueryParameters(new Dictionary<string, object?>()
+    {
+        { "page", null },
+        { "minPrice", minPrice },
+        { "maxPrice", maxPrice },
     });
 }

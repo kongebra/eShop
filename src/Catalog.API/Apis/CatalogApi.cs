@@ -38,6 +38,16 @@ public static class CatalogApi
             .WithSummary("Get catalog item")
             .WithDescription("Get an item from the catalog")
             .WithTags("Items");
+        api.MapGet("/items/{id:int}/related", GetRelatedItems)
+            .WithName("GetRelatedItems")
+            .WithSummary("Get related catalog items")
+            .WithDescription("Get catalog items related to the specified item")
+            .WithTags("Items");
+        api.MapGet("/items/price-range", GetItemPriceRange)
+            .WithName("GetItemPriceRange")
+            .WithSummary("Get catalog item price range")
+            .WithDescription("Get the minimum and maximum item prices in the catalog")
+            .WithTags("Items");
         v1.MapGet("/items/by/{name:minlength(1)}", GetItemsByName)
             .WithName("GetItemsByName")
             .WithSummary("Get catalog items by name")
@@ -81,6 +91,11 @@ public static class CatalogApi
             .WithSummary("List catalog item types")
             .WithDescription("Get a list of the types of catalog items")
             .WithTags("Types");
+        api.MapGet("/catalogtypes/{id:int}", GetCatalogTypeById)
+            .WithName("GetItemType")
+            .WithSummary("Get catalog item type")
+            .WithDescription("Get a catalog item type by id")
+            .WithTags("Types");
         api.MapGet("/catalogbrands",
             [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
             async (CatalogContext context) => await context.CatalogBrands.OrderBy(x => x.Brand).ToListAsync())
@@ -115,9 +130,12 @@ public static class CatalogApi
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
     public static async Task<Ok<PaginatedItems<CatalogItem>>> GetAllItemsV1(
         [AsParameters] PaginationRequest paginationRequest,
-        [AsParameters] CatalogServices services)
+        [AsParameters] CatalogServices services,
+        [Description("The maximum item price to return")] decimal? maxPrice,
+        [Description("The minimum item price to return")] decimal? minPrice,
+        [Description("Whether to return only in-stock or out-of-stock items")] bool? inStock)
     {
-        return await GetAllItems(paginationRequest, services, null, null, null);
+        return await GetAllItems(paginationRequest, services, null, null, null, maxPrice, minPrice, inStock);
     }
 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
@@ -126,13 +144,59 @@ public static class CatalogApi
         [AsParameters] CatalogServices services,
         [Description("The name of the item to return")] string? name,
         [Description("The type of items to return")] int? type,
-        [Description("The brand of items to return")] int? brand)
+        [Description("The brand of items to return")] int? brand,
+        [Description("The maximum item price to return")] decimal? maxPrice,
+        [Description("The minimum item price to return")] decimal? minPrice,
+        [Description("Whether to return only in-stock or out-of-stock items")] bool? inStock)
     {
+        ValidatePriceFilters(minPrice, maxPrice);
+
         var pageSize = paginationRequest.PageSize;
         var pageIndex = paginationRequest.PageIndex;
 
         var root = (IQueryable<CatalogItem>)services.Context.CatalogItems;
 
+        root = ApplyCatalogFilters(root, name, type, brand, minPrice, maxPrice, inStock);
+
+        var totalItems = await root
+            .LongCountAsync();
+
+        var itemsOnPage = await root
+            .OrderBy(c => c.Name)
+            .Skip(pageSize * pageIndex)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return TypedResults.Ok(new PaginatedItems<CatalogItem>(pageIndex, pageSize, totalItems, itemsOnPage));
+    }
+
+    private static void ValidatePriceFilters(decimal? minPrice, decimal? maxPrice)
+    {
+        if (minPrice < 0)
+        {
+            throw new BadHttpRequestException("minPrice must be greater than or equal to zero.", StatusCodes.Status400BadRequest);
+        }
+
+        if (maxPrice < 0)
+        {
+            throw new BadHttpRequestException("maxPrice must be greater than or equal to zero.", StatusCodes.Status400BadRequest);
+        }
+
+        if (minPrice > maxPrice)
+        {
+            throw new BadHttpRequestException("minPrice must be less than or equal to maxPrice.", StatusCodes.Status400BadRequest);
+        }
+    }
+
+    private static IQueryable<CatalogItem> ApplyCatalogFilters(
+        IQueryable<CatalogItem> root,
+        string? name,
+        int? type,
+        int? brand,
+        decimal? minPrice,
+        decimal? maxPrice,
+        bool? inStock)
+    {
         if (name is not null)
         {
             root = root.Where(c => c.Name.StartsWith(name));
@@ -145,17 +209,22 @@ public static class CatalogApi
         {
             root = root.Where(c => c.CatalogBrandId == brand);
         }
+        if (minPrice is not null)
+        {
+            root = root.Where(c => c.Price >= minPrice.Value);
+        }
+        if (maxPrice is not null)
+        {
+            root = root.Where(c => c.Price <= maxPrice.Value);
+        }
+        if (inStock is not null)
+        {
+            root = inStock.Value
+                ? root.Where(c => c.AvailableStock > 0)
+                : root.Where(c => c.AvailableStock <= 0);
+        }
 
-        var totalItems = await root
-            .LongCountAsync();
-
-        var itemsOnPage = await root
-            .OrderBy(c => c.Name)
-            .Skip(pageSize * pageIndex)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return TypedResults.Ok(new PaginatedItems<CatalogItem>(pageIndex, pageSize, totalItems, itemsOnPage));
+        return root;
     }
 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
@@ -191,12 +260,63 @@ public static class CatalogApi
     }
 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
+    public static async Task<Results<Ok<List<CatalogItem>>, NotFound, BadRequest<ProblemDetails>>> GetRelatedItems(
+        [AsParameters] CatalogServices services,
+        [Description("The source catalog item id")] int id,
+        [Description("The maximum number of related items to return")] int limit = 4)
+    {
+        if (id <= 0)
+        {
+            return TypedResults.BadRequest<ProblemDetails>(new()
+            {
+                Detail = "Id is not valid"
+            });
+        }
+
+        if (limit <= 0 || limit > 12)
+        {
+            return TypedResults.BadRequest<ProblemDetails>(new()
+            {
+                Detail = "Limit must be between 1 and 12."
+            });
+        }
+
+        var sourceItem = await services.Context.CatalogItems.SingleOrDefaultAsync(item => item.Id == id);
+
+        if (sourceItem is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var minPrice = sourceItem.Price * 0.8m;
+        var maxPrice = sourceItem.Price * 1.2m;
+
+        var candidates = await services.Context.CatalogItems
+            .Where(item => item.Id != sourceItem.Id && item.CatalogTypeId == sourceItem.CatalogTypeId)
+            .ToListAsync();
+
+        var relatedItems = candidates
+            .OrderByDescending(item => item.CatalogBrandId == sourceItem.CatalogBrandId)
+            .ThenByDescending(item => item.Price >= minPrice && item.Price <= maxPrice)
+            .ThenBy(item => Math.Abs(item.Price - sourceItem.Price))
+            .ThenBy(item => item.Name)
+            .ThenBy(item => item.Id)
+            .Take(limit)
+            .ToList();
+
+        return TypedResults.Ok(relatedItems);
+    }
+
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
     public static async Task<Ok<PaginatedItems<CatalogItem>>> GetItemsByName(
         [AsParameters] PaginationRequest paginationRequest,
         [AsParameters] CatalogServices services,
-        [Description("The name of the item to return")] string name)
+        [Description("The name of the item to return")] string name,
+        [Description("The maximum item price to return")] decimal? maxPrice,
+        [Description("The minimum item price to return")] decimal? minPrice,
+        [Description("Whether to return only in-stock or out-of-stock items")] bool? inStock)
     {
-        return await GetAllItems(paginationRequest, services, name, null, null);
+        return await GetAllItems(paginationRequest, services, name, null, null, maxPrice, minPrice, inStock);
     }
 
     [ProducesResponseType<byte[]>(StatusCodes.Status200OK, "application/octet-stream",
@@ -244,7 +364,7 @@ public static class CatalogApi
 
         if (!services.CatalogAI.IsEnabled)
         {
-            return await GetItemsByName(paginationRequest, services, text);
+            return await GetAllItems(paginationRequest, services, text, null, null, null, null, null);
         }
 
         // Create an embedding for the input search
@@ -252,7 +372,7 @@ public static class CatalogApi
 
         if (vector is null)
         {
-            return await GetItemsByName(paginationRequest, services, text);
+            return await GetAllItems(paginationRequest, services, text, null, null, null, null, null);
         }
 
         // Get the total number of items
@@ -293,18 +413,55 @@ public static class CatalogApi
         [AsParameters] PaginationRequest paginationRequest,
         [AsParameters] CatalogServices services,
         [Description("The type of items to return")] int typeId,
-        [Description("The brand of items to return")] int? brandId)
+        [Description("The brand of items to return")] int? brandId,
+        [Description("The maximum item price to return")] decimal? maxPrice,
+        [Description("The minimum item price to return")] decimal? minPrice,
+        [Description("Whether to return only in-stock or out-of-stock items")] bool? inStock)
     {
-        return await GetAllItems(paginationRequest, services, null, typeId, brandId);
+        return await GetAllItems(paginationRequest, services, null, typeId, brandId, maxPrice, minPrice, inStock);
     }
 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
     public static async Task<Ok<PaginatedItems<CatalogItem>>> GetItemsByBrandId(
         [AsParameters] PaginationRequest paginationRequest,
         [AsParameters] CatalogServices services,
-        [Description("The brand of items to return")] int? brandId)
+        [Description("The brand of items to return")] int? brandId,
+        [Description("The maximum item price to return")] decimal? maxPrice,
+        [Description("The minimum item price to return")] decimal? minPrice,
+        [Description("Whether to return only in-stock or out-of-stock items")] bool? inStock)
     {
-        return await GetAllItems(paginationRequest, services, null, null, brandId);
+        return await GetAllItems(paginationRequest, services, null, null, brandId, maxPrice, minPrice, inStock);
+    }
+
+    public static async Task<Ok<CatalogPriceRange>> GetItemPriceRange(CatalogContext context)
+    {
+        var minPrice = await context.CatalogItems.MinAsync(item => item.Price);
+        var maxPrice = await context.CatalogItems.MaxAsync(item => item.Price);
+
+        return TypedResults.Ok(new CatalogPriceRange(minPrice, maxPrice));
+    }
+
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest, "application/problem+json")]
+    public static async Task<Results<Ok<CatalogType>, NotFound, BadRequest<ProblemDetails>>> GetCatalogTypeById(
+        CatalogContext context,
+        [Description("The catalog type id")] int id)
+    {
+        if (id <= 0)
+        {
+            return TypedResults.BadRequest<ProblemDetails>(new()
+            {
+                Detail = "Id is not valid"
+            });
+        }
+
+        var catalogType = await context.CatalogTypes.FindAsync(id);
+
+        if (catalogType is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(catalogType);
     }
 
     public static async Task<Results<Created, BadRequest<ProblemDetails>, NotFound<ProblemDetails>>> UpdateItemV1(
@@ -420,3 +577,5 @@ public static class CatalogApi
     public static string GetFullPath(string contentRootPath, string pictureFileName) =>
         Path.Combine(contentRootPath, "Pics", pictureFileName);
 }
+
+public sealed record CatalogPriceRange(decimal MinPrice, decimal MaxPrice);

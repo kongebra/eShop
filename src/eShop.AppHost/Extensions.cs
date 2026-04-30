@@ -1,4 +1,4 @@
-using Aspire.Hosting.Eventing;
+﻿using Aspire.Hosting.Eventing;
 using Aspire.Hosting.Lifecycle;
 
 namespace eShop.AppHost;
@@ -57,7 +57,7 @@ internal static class Extensions
         const string textEmbeddingModelName = "text-embedding-3-small";
 
         const string chatName = "chatModel";
-        const string chatModelName = "gpt-4.1-mini";
+        const string chatModelName = "gpt-5.4-mini";
 
         if (openAITarget != OpenAITarget.AzureOpenAI)
         {

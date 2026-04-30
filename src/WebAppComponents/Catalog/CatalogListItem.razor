@@ -10,6 +10,11 @@
             <span class='name'>@Item.Name</span>
             <span class='price'>$@Item.Price.ToString("0.00")</span>
         </span>
+        <span class="stock-status @(Item.AvailableStock > 0 ? "in-stock" : "out-of-stock")"
+              aria-label="@StockStatusText">
+            <span class="stock-status-dot" aria-hidden="true"></span>
+            <span>@StockStatusText</span>
+        </span>
     </a>
 </div>
 
@@ -19,4 +24,6 @@
 
     [Parameter]
     public bool IsLoggedIn { get; set; }
+
+    private string StockStatusText => Item.AvailableStock > 0 ? "In stock" : "Out of stock";
 }
