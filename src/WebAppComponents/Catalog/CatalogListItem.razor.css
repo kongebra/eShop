@@ -49,6 +49,37 @@
     margin-left: auto;
 }
 
+.stock-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0.35rem 0.75rem 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.stock-status-dot {
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+}
+
+.stock-status.in-stock {
+    color: #167a3b;
+}
+
+.stock-status.in-stock .stock-status-dot {
+    background: #167a3b;
+}
+
+.stock-status.out-of-stock {
+    color: #c62828;
+}
+
+.stock-status.out-of-stock .stock-status-dot {
+    background: #c62828;
+}
+
 
 @media only screen and (max-width: 480px) { 
     .catalog-item {

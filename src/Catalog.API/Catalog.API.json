@@ -167,6 +167,115 @@
         }
       }
     },
+    "/api/catalog/items/{id}/related": {
+      "get": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Get related catalog items",
+        "description": "Get catalog items related to the specified item",
+        "operationId": "GetRelatedItems",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The source catalog item id",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of related items to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 4
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "query",
+            "description": "The API version, in the format 'major.minor'.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "1.0"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogItem"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/catalog/items/price-range": {
+      "get": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Get catalog item price range",
+        "description": "Get the minimum and maximum item prices in the catalog",
+        "operationId": "GetItemPriceRange",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "query",
+            "description": "The API version, in the format 'major.minor'.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "1.0"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogPriceRange"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/catalog/items/{id}/pic": {
       "get": {
         "tags": [
@@ -317,6 +426,64 @@
         }
       }
     },
+    "/api/catalog/catalogtypes/{id}": {
+      "get": {
+        "tags": [
+          "Types"
+        ],
+        "summary": "Get catalog item type",
+        "description": "Get a catalog item type by id",
+        "operationId": "GetItemType",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The catalog type id",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "query",
+            "description": "The API version, in the format 'major.minor'.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "1.0"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogType"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/catalog/catalogbrands": {
       "get": {
         "tags": [
@@ -444,6 +611,40 @@
               ],
               "format": "int32",
               "default": 0
+            }
+          },
+          {
+            "name": "maxPrice",
+            "in": "query",
+            "description": "The maximum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "minPrice",
+            "in": "query",
+            "description": "The minimum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "inStock",
+            "in": "query",
+            "description": "Whether to return only in-stock or out-of-stock items",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -581,6 +782,40 @@
             "schema": {
               "minLength": 1,
               "type": "string"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "in": "query",
+            "description": "The maximum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "minPrice",
+            "in": "query",
+            "description": "The minimum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "inStock",
+            "in": "query",
+            "description": "Whether to return only in-stock or out-of-stock items",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -766,6 +1001,40 @@
             }
           },
           {
+            "name": "maxPrice",
+            "in": "query",
+            "description": "The maximum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "minPrice",
+            "in": "query",
+            "description": "The minimum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "inStock",
+            "in": "query",
+            "description": "Whether to return only in-stock or out-of-stock items",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "api-version",
             "in": "query",
             "description": "The API version, in the format 'major.minor'.",
@@ -849,6 +1118,40 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "maxPrice",
+            "in": "query",
+            "description": "The maximum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "minPrice",
+            "in": "query",
+            "description": "The minimum item price to return",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "inStock",
+            "in": "query",
+            "description": "Whether to return only in-stock or out-of-stock items",
+            "schema": {
+              "type": "boolean"
             }
           },
           {
@@ -1007,6 +1310,31 @@
           },
           "onReorder": {
             "type": "boolean"
+          }
+        }
+      },
+      "CatalogPriceRange": {
+        "required": [
+          "minPrice",
+          "maxPrice"
+        ],
+        "type": "object",
+        "properties": {
+          "minPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "maxPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },

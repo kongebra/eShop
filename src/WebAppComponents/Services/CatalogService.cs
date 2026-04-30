@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+using System.Globalization;
+using System.Net.Http.Json;
 using System.Web;
 using eShop.WebAppComponents.Catalog;
 
@@ -14,9 +15,9 @@ public class CatalogService(HttpClient httpClient) : ICatalogService
         return httpClient.GetFromJsonAsync<CatalogItem>(uri);
     }
 
-    public async Task<CatalogResult> GetCatalogItems(int pageIndex, int pageSize, int? brand, int? type)
+    public async Task<CatalogResult> GetCatalogItems(int pageIndex, int pageSize, int? brand, int? type, decimal? minPrice = null, decimal? maxPrice = null)
     {
-        var uri = GetAllCatalogItemsUri(remoteServiceBaseUrl, pageIndex, pageSize, brand, type);
+        var uri = GetAllCatalogItemsUri(remoteServiceBaseUrl, pageIndex, pageSize, brand, type, minPrice, maxPrice);
         var result = await httpClient.GetFromJsonAsync<CatalogResult>(uri);
         return result!;
     }
@@ -49,19 +50,37 @@ public class CatalogService(HttpClient httpClient) : ICatalogService
         return result!;
     }
 
-    private static string GetAllCatalogItemsUri(string baseUri, int pageIndex, int pageSize, int? brand, int? type)
+    public async Task<CatalogPriceRange> GetPriceRange()
     {
-        string filterQs = string.Empty;
+        var uri = $"{remoteServiceBaseUrl}items/price-range";
+        var result = await httpClient.GetFromJsonAsync<CatalogPriceRange>(uri);
+        return result!;
+    }
+
+    private static string GetAllCatalogItemsUri(string baseUri, int pageIndex, int pageSize, int? brand, int? type, decimal? minPrice, decimal? maxPrice)
+    {
+        var query = new List<string>();
 
         if (type.HasValue)
         {
-            filterQs += $"type={type.Value}&";
+            query.Add($"type={type.Value}");
         }
         if (brand.HasValue)
         {
-            filterQs += $"brand={brand.Value}&";
+            query.Add($"brand={brand.Value}");
+        }
+        if (minPrice.HasValue)
+        {
+            query.Add($"minPrice={minPrice.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+        if (maxPrice.HasValue)
+        {
+            query.Add($"maxPrice={maxPrice.Value.ToString(CultureInfo.InvariantCulture)}");
         }
 
-        return $"{baseUri}items?{filterQs}pageIndex={pageIndex}&pageSize={pageSize}";
+        query.Add($"pageIndex={pageIndex}");
+        query.Add($"pageSize={pageSize}");
+
+        return $"{baseUri}items?{string.Join("&", query)}";
     }
 }

@@ -1,4 +1,4 @@
-using eShop.AppHost;
+﻿using eShop.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -62,10 +62,10 @@ var webApp = builder.AddProject<Projects.WebApp>("webapp", launchProfileName)
     .WithEnvironment("IdentityUrl", identityEndpoint);
 
 // set to true if you want to use OpenAI
-bool useOpenAI = false;
+bool useOpenAI = true;
 if (useOpenAI)
 {
-    builder.AddOpenAI(catalogApi, webApp, OpenAITarget.OpenAI); // set to AzureOpenAI if you want to use Azure OpenAI
+    builder.AddOpenAI(catalogApi, webApp, OpenAITarget.AzureOpenAIExistingWithKey); // set to AzureOpenAI if you want to use Azure OpenAI
 }
 
 bool useOllama = false;
